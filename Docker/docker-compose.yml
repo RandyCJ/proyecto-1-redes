@@ -1,0 +1,226 @@
+version: '2.4'
+
+services:
+  
+  #Se crea el DHCP de la LAN #1 
+  dhcp1:
+    
+    build:
+      context: .
+      dockerfile: centosDHCP.dockerfile
+    privileged: true 
+    networks:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.4"
+
+  #Se crea el Router de la LAN #1 
+  router1:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+    ports:
+      - 82:80
+    networks:
+  
+      Internet:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.1"
+
+
+    depends_on: 
+      - dns
+  
+  #Se crea el DNS de la LAN #1 
+  dns:
+    
+    hostname: srvcentos
+    build:
+      context: .
+      dockerfile: centosDNS.dockerfile
+    
+    privileged: true 
+    
+    networks:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.3"
+    
+    depends_on:
+      - dhcp1
+  
+  #Se crea el Proxy Reverso de la LAN #1 
+  proxy_reverso:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+
+    networks:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.20"
+    
+    depends_on:
+      - web_cache
+
+  #Se crea el Web Server de la LAN #1 
+  web_server_1:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+
+    networks:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.21"
+    
+    depends_on:
+      - router1
+
+  #Se crea el Web Cache de la LAN #1     
+  web_cache:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+    networks:
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.7"
+    
+    depends_on:
+      - vpn
+
+  #Se crea el Router de la LAN #2     
+  router2:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+    ports:
+      - 83:80
+    networks:
+      
+      LAN_Virtual_1:
+        ipv4_address: "10.0.0.2"
+      
+      LAN_Virtual_2:
+        ipv4_address: "10.0.1.1"
+    
+    depends_on:
+      - router1
+
+  #Se crea el DHCP de la LAN #2    
+  dhcp2:
+    
+    build:
+      context: .
+      dockerfile: centosDHCP2.dockerfile
+    
+    privileged: true 
+
+    networks:
+      LAN_Virtual_2:
+        ipv4_address: "10.0.1.5"
+
+  #Se crea el VPN de la LAN #2    
+  vpn:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+
+    networks:
+      LAN_Virtual_2:
+        ipv4_address: "10.0.1.10"
+  
+  #Se crea el Web Server de la LAN #2    
+  web_server_2:
+    
+    build:
+      context: .
+      dockerfile: centos.dockerfile
+    
+    privileged: true 
+    
+
+    networks:
+      LAN_Virtual_2:
+        ipv4_address: "10.0.1.21"
+    
+    depends_on:
+      - web_server_1
+
+  
+  #Proxy reverso de prueba
+  reverse-proxy:
+    image: nginx:1.17.10
+    container_name: reverse_proxy_demo
+    volumes:
+      - ./reverse_proxy/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 80:80
+  
+  #Web server 1 de prueba
+  web-server1:
+    image: web-server1
+    container_name: web-server1
+    build:
+      context: ./web_server1
+    ports:
+      - 5001:5001
+    restart: on-failure
+
+  #Web server 2 de prueba
+  web-server2:
+    image: web-server2
+    container_name: web-server2
+    build:
+      context: ./web_server2
+    ports:
+      - 5002:5002
+    restart: on-failure
+
+
+
+#Se crea las networks internas y la de Internet
+
+networks:
+  LAN_Virtual_1:
+    name: LAN_Virtual_1
+    driver: macvlan
+
+    ipam:
+      config:
+      - subnet: "10.0.0.0/24"
+        gateway: "10.0.0.15"
+        
+  LAN_Virtual_2:
+    
+    name: LAN_Virtual_2
+    driver: macvlan
+
+    ipam:
+      config:
+      - subnet: "10.0.1.0/24" 
+        gateway: "10.0.1.4" 
+        
+  
+  Internet:
+    name: Internet
+    driver: bridge       
